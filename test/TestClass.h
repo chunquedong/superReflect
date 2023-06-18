@@ -6,7 +6,8 @@ template<T>
 class TestClass
 {
     int m_p;
-    int method();
+public:
+    int method(int a, char* b, Test* c, Test d);
 public:
     TestClass( float f );
     YourFloat m_f;
@@ -18,10 +19,12 @@ public:
     enum EnumType {
         kA, kB = 2
     };
+
+    InClass testValue(InClass val);
 };
 
 TestClass<int> g_bar;
-void globalFunc(char* name) {
+void globalFunc(const std::string& name) {
 }
 
 }

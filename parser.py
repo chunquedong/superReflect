@@ -6,7 +6,7 @@ import sys
 classIndex = {}
 
 def parse_type(member: minidom.Element):
-    mem_type = "void"
+    mem_type = ""
     type_content = member.getElementsByTagName("type")[0].firstChild
     if type_content is not None:
         mem_type = type_content.nodeValue
@@ -27,8 +27,8 @@ def parse_operation(member: minidom.Element):
     for p in argsstring:
         p_type = parse_type(p)
         p_name = p.getElementsByTagName("declname")[0].firstChild.nodeValue
-        #mem_args.append({"name":p_name, "type":p_type})
-        mem_args.append(p_type)
+        mem_args.append({"name":p_name, "type":p_type})
+        #mem_args.append(p_type)
 
 
     brief_desc = ""
@@ -71,7 +71,7 @@ def parse_operation(member: minidom.Element):
     res = {
         "name": mem_name,
         "access": mem_privacy,
-        "static": mem_static,
+        "static": mem_static == "yes",
         "type": mem_type,
         "param": mem_args,
         "desc": brief_desc,
@@ -108,7 +108,7 @@ def _parse_class_file(file: str):
     class_flag = ""
     base_class = []
     inner_class = []
-    if kind == "file":
+    if kind == "file" or kind == "namespace":
         if compounddef.hasAttribute("abstract"):
             if compounddef.attributes["abstract"].value == "yes":
                 class_flag = "abstract"
@@ -133,10 +133,14 @@ def _parse_class_file(file: str):
             if mem_kind in ["property","variable"]:
                 af = parse_operation(member)
                 del af["param"]
+                if kind == "file" or kind == "namespace":
+                    af["static"] = True
                 field.append(af)
             elif mem_kind in ["event","function","signal","prototype","friend","slot"]:
-                # print("  do_operation", member.getElementsByTagName("name")[0].firstChild.nodeValue)
-                method.append(parse_operation(member))
+                am = parse_operation(member)
+                if kind == "file" or kind == "namespace":
+                    am["static"] = True
+                method.append(am)
 
             elif mem_kind in ["enum"]:
                 enum.append(parse_enum(member))
@@ -152,8 +156,19 @@ def _parse_class_file(file: str):
         cname = innerclass.firstChild.nodeValue
         inner_class.append(cname)
     
+    nsp = class_name.rfind("::")
+    if nsp >=0:
+        namespace = class_name[:nsp+2]
+        simple_name = class_name[nsp+2:]
+    else:
+        namespace = ''
+        simple_name = class_name
+    simple_name = simple_name.replace(".", "_")
+
     res = {
         "name": class_name,
+        "simple_name": simple_name,
+        "namespace": namespace,
         "kind": kind,
         "field": field,
         "method": method,
@@ -161,7 +176,7 @@ def _parse_class_file(file: str):
         "inner_class": inner_class,
         "typedef": typedef,
     }
-    if kind != "file":
+    if kind != "file" and kind != "namespace":
         res["flag"] = class_flag
         res["base"] = base_class
     return res
@@ -170,17 +185,13 @@ def _parse_class_file(file: str):
 
 def parse_file(indexFile, files):
     clist = []
-    file = []
     doxy_root = os.path.dirname(indexFile)
 
     for clss in files:
         obj = _parse_class_file(os.path.join(doxy_root, clss[1] + ".xml"))
-        if obj["kind"] == "file":
-            file.append(obj)
-        else:
-            clist.append(obj)
+        clist.append(obj)
 
-    return {"class":clist, "file":file}
+    return clist
 
 def parse_index(indexFile):
     xml_doc = minidom.parse(indexFile)
@@ -189,7 +200,7 @@ def parse_index(indexFile):
     files = []
     for s in compounds:
         kind = s.attributes["kind"].value
-        if kind in ["class","struct","interface","protocol","exception","file"]:
+        if kind in ["class","struct","interface","protocol","exception","file","namespace"]:
             refid = s.attributes["refid"].value
             name = s.getElementsByTagName('name')[0].firstChild.nodeValue
             classIndex[refid] = name

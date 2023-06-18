@@ -1,0 +1,104 @@
+#include <emscripten.h>
+
+extern "C" {
+
+{% for aclazz in clazz %}
+  //============================= {{aclazz.name}}
+
+  {% for enum in aclazz.enum %}
+        {% for value in enum['values'] %}
+          long {{aclazz.symb_name}}_{{value.name}}() {
+            return {{aclazz.name}}::{{value.name}};
+          }
+        {% endfor %}
+  {% endfor %}
+
+
+  {% for method in aclazz.method if method.access != "private" %}
+    {% set is_static = method.static or aclazz.simple_name == method.name %}
+    {% set is_ctor = aclazz.simple_name == method.name %}
+    {% set is_void = method.type == "void" and aclazz.simple_name != method.name %}
+
+    {{method.type_pass}} EMSCRIPTEN_KEEPALIVE {{aclazz.symb_name}}_{{method.name}}(
+        {%- if not is_static -%}
+            {{aclazz.name}}* __self
+        {%- endif -%}
+
+        {%- for param in method.param -%}
+          {%- if not is_static or not loop.first -%},{%- endif -%}
+          {{param.type_pass}} {{param.name}}
+        {%- endfor -%}
+    ) {
+
+        {% if not is_void -%}
+          {%- if method.type_kind == "value" -%}
+            static auto __res = 
+          {%- else -%}
+            auto __res = 
+          {%- endif -%}
+        {% endif -%}
+
+        {%- if not is_static -%}
+            __self->{{method.name}}(
+        {%- elif is_ctor -%}
+            new {{aclazz.name}}(
+        {%- else -%}
+            {{aclazz.name}}::{{method.name}}(
+        {%- endif -%}
+
+          {%- for param in method.param -%}
+            {%- if not loop.first -%},{%- endif -%}
+            {%- if param.type_kind == "ref" or param.type_kind == "value" -%}*{%- endif -%}
+            {{param.name}}
+          {%- endfor -%}
+        );
+
+        {% if is_void %}
+          return;
+        {% elif method.type_kind == "value" or method.type_kind == "ref" %}
+          return &__res;
+        {% else %}
+          return __res;
+        {% endif %}
+    };
+  {% endfor %}
+
+  {% for field in aclazz.field if field.access != "private" %}
+    {% if field.static %}
+      {{field.type_pass}} EMSCRIPTEN_KEEPALIVE {{aclazz.symb_name}}_get_{{field.name}}() {
+        {% if field.type_kind == "value" or field.type_kind == "ref" %}
+          return &{{aclazz.name}}::{{field.name}};
+        {% else %}
+          return {{aclazz.name}}::{{field.name}};
+        {% endif %}
+      };
+      void {{aclazz.symb_name}}_set_{{field.name}}({{aclazz.name}}* __self, {{field.type_pass}} v) {
+        {% if field.type_kind == "value" or field.type_kind == "ref" %}
+          {{aclazz.name}}::{{field.name}} = *v;
+        {% else %}
+          {{aclazz.name}}::{{field.name}} = v;
+        {% endif %}
+      };
+    {% else %}
+      {{field.type_pass}} EMSCRIPTEN_KEEPALIVE {{aclazz.symb_name}}_get_{{field.name}}({{aclazz.name}}* __self) {
+        {% if field.type_kind == "value" or field.type_kind == "ref" %}
+          return &(__self->{{field.name}});
+        {% else %}
+          return __self->{{field.name}};
+        {% endif %}
+      };
+      void {{aclazz.symb_name}}_set_{{field.name}}({{aclazz.name}}* __self, {{field.type_pass}} v) {
+        __self->{{field.name}} = v;
+        {% if field.type_kind == "value" or field.type_kind == "ref" %}
+          __self->{{field.name}} = *v;
+        {% else %}
+          __self->{{field.name}} = v;
+        {% endif %}
+      };
+    {% endif %}
+  {% endfor %}
+
+{% endfor %}
+
+
+}

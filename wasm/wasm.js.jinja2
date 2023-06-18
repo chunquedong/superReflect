@@ -1,0 +1,141 @@
+Module.typeDb = {};
+
+function convertFromType(value, type, originType) {
+  if (type == 'string' || originType == 'char *') {
+    var str  = value;
+    var ret = 0;
+    if (str !== null && str !== undefined && str !== 0) { // null string
+      // at most 4 bytes per UTF-8 code point, +1 for the trailing '\0'
+      ret = stringToUTF8OnStack(str);
+    }
+    return ret;
+  }
+  else if (type == 'array') {
+    var arr = value;
+    var ret = stackAlloc(arr.length);
+    writeArrayToMemory(arr, ret);
+    return ret;
+  }
+  if (!value) return null;
+  return value.ptr;
+}
+
+function convertToType(value, type, originType) {
+  if (type == 'string' || originType == 'char *') {
+    return UTF8ToString(value);
+  }
+
+  var typeDef = Module.typeDb[type];
+  if (typeDef) {
+    var obj = new typeDef();
+    obj.ptr = value;
+    return obj;
+  }
+  return value;
+}
+
+Module['castObject'] = function(obj, clazz) {
+  var n = new clazz();
+  n.ptr = obj.ptr;
+  return n;
+}
+
+
+{% for aclazz in clazz %}
+  {% set class_name = aclazz.simple_name %}
+  //============================= {{class_name}}
+
+  {% if not aclazz.kind == "file" and not aclazz.kind == "namespace" %}
+    function {{class_name}}() {};
+    Module['{{class_name}}'] = {{class_name}};
+    Module.typeDb['{{class_name}}'] = {{class_name}};
+  {% else %}
+    var {{class_name}} = Module;
+  {% endif %}
+
+  {% for enum in aclazz.enum %}
+    (function() {
+      function setupEnums() {
+        //{{enum.name}}
+        {% for value in enum['values'] %}
+          Module['{{class_name}}']['{{value.name}}'] = {{aclazz.symb_name}}_{{value.name}}();
+        {% endfor %}
+      }
+      if (runtimeInitialized) setupEnums();
+      else addOnInit(setupEnums);
+    })();
+  {% endfor %}
+
+
+  {% for method in aclazz.method if method.access != "private" %}
+    {% set is_static = method.static or class_name == method.name %}
+    {% set is_void = method.type == "void" and aclazz.simple_name != method.name %}
+
+    {% if is_static -%}
+      {{class_name}}.{{method.name}} = function(
+    {%- else -%}
+      {{class_name}}.prototype.{{method.name}} = function(
+    {%- endif -%}
+        {%- for param in method.param -%}
+          {%- if not loop.first -%},{%- endif -%}
+          {{param.name}}
+        {%- endfor -%}
+    ) {
+
+        {% for param in method.param %}
+          {%- if param.type_kind == "primitive" -%}
+          {% else -%}
+            {{param.name}} = convertFromType({{param.name}}, '{{param.type_simple}}', '{{param.type}}');
+          {% endif -%}
+        {% endfor %}
+
+        
+
+        {% if not is_void -%}var res = {% endif -%}
+        Module["_{{aclazz.symb_name}}_{{method.name}}"](
+          {%- if not is_static -%}
+            this.ptr
+          {%- endif -%}
+          {%- for param in method.param -%}
+            {%- if not is_static or not loop.first -%},{%- endif -%}
+            {{param.name}}
+          {%- endfor -%}
+        );
+
+        {% if method.type_kind == "primitive" %}
+          return res;
+        {% elif is_void %}
+          return;
+        {% elif aclazz.simple_name == method.name %}
+          return convertToType(res, '{{class_name}}', '{{method.type}}');
+        {% else %}
+          return convertToType(res, '{{method.type_simple}}', '{{method.type}}');
+        {% endif %}
+    };
+  {% endfor %}
+
+  {% for field in aclazz.field if field.access != "private" %}
+    {% if field.static %}
+      {{class_name}}.get_{{field.name}} = function() {
+        var res = {{aclazz.symb_name}}_get_{{field.name}}();
+        return convertToType(res, '{{field.type_simple}}', '{{field.type}}');
+      };
+      {{class_name}}.set_{{field.name}} = function(v) {
+        {{aclazz.symb_name}}_set_{{field.name}}(convertFromType(v, '{{field.type_simple}}', '{{field.type}}'));
+      };
+      Object.defineProperty({{class_name}}, '{{field.name}}', { get: {{class_name}}.get_{{field.name}}, set: {{class_name}}.set_{{field.name}} });
+    {% else %}
+      {{class_name}}.prototype.get_{{field.name}} = function() {
+        var res = {{aclazz.symb_name}}_get_{{field.name}}(this.ptr);
+        return convertToType(res, '{{field.type_simple}}', '{{field.type}}');
+      };
+      {{class_name}}.prototype.set_{{field.name}} = function(v) {
+        {{aclazz.symb_name}}_set_{{field.name}}(this.ptr, convertFromType(v, '{{field.type_simple}}', '{{field.type}}'));
+      };
+      Object.defineProperty({{class_name}}.prototype, '{{field.name}}', { get: {{class_name}}.prototype.get_{{field.name}}, set: {{class_name}}.prototype.set_{{field.name}} });
+    {% endif %}
+  {% endfor %}
+
+{% endfor %}
+
+

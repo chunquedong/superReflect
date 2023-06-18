@@ -1,6 +1,6 @@
 SuperReflect
 
-A customizable C++ reflection tool and binding generator, based on doxygen.
+A customizable C++ reflection tool and webassembly binding generator, based on doxygen.
 
 ```
 void registerAllClass() {

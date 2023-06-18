@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <title>Emscripten WebGL Demo</title>
+    <style>
+      /* the canvas *must not* have any border or padding, or mouse coords will be wrong */
+      canvas.emscripten {
+        border: 0px none;
+      }
+    </style>
+  </head>
+  <body>
+  <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+  <script type="text/javascript" src="test2.js"></script>
+  <script type='text/javascript'>
+      createMyModule({
+        print: function() { 
+            console.log(Array.prototype.slice.call(arguments).join(" "));
+        },
+        printErr: function() {
+            console.warn(Array.prototype.slice.call(arguments).join(" "));
+        },
+        canvas: document.getElementById('canvas')
+      }).then(function(Module) {
+        var b = Module.Bar.Bar(123);
+        b.doSomething();
+
+        var f = Module.castObject(b, Module.Foo);
+        f.setVal(200);
+        console.log(f.getVal());
+        b.doSomething();
+      });
+   </script>
+</body>
+</html>

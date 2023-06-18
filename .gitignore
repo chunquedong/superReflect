@@ -1,2 +1,4 @@
 test/doxygenOut/
 out/
+doxygenOut
+wasmOut/

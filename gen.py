@@ -12,5 +12,5 @@ file.close()
 env = jinja2.Environment(loader=jinja2.FileSystemLoader(""))
 temp = env.get_template(template)
 
-temp_out = temp.render(clazz=input["class"], file=input["file"])
+temp_out = temp.render(clazz=input)
 print(temp_out)
